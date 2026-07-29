@@ -5,4 +5,6 @@ pymongo
 pymongo==4.7
 certifi
 scikit-learn
+dill
+pyaml
 #-e .
