@@ -34,7 +34,7 @@ class DataTransformation:
         except Exception as e:
                     raise NetworkSecurityException(e,sys)
 
-    def get_data_transformer_object()->Pipeline:
+    def get_data_transformer_object(cls)->Pipeline:
         '''
         It intialises a KNN Imputer object with the parameters specified in the training_pipeline.py
         file and returns a Pipeline object with the KNNImputer object as the first step.
@@ -85,6 +85,7 @@ class DataTransformation:
             save_numpy_array_data(self.data_transformation_config.transformed_train_file_path, array = train_arr)
             save_numpy_array_data(self.data_transformation_config.transformed_test_file_path, array = test_arr)
             save_object(self.data_transformation_config.transformed_object_file_path, obj = preprocessor_obj)
+            save_object('final_model/preprocessor.pkl',preprocessor_obj)
 
             data_transformation_artifact = DataTransformationArtifact(
                   transformed_object_file_path = self.data_transformation_config.transformed_object_file_path,

@@ -41,7 +41,7 @@ class DataValidation:
     def validate_no_of_numerical_columns(self,dataframe:pd.DataFrame)->bool:
                 try:
                     number_of_columns=len(list(self._schema_config.values())[1])
-                    df_numerical_columns = len(dataframe.select_dtypes(exclude = ['object','str']).columns)
+                    df_numerical_columns = len(dataframe.select_dtypes(exclude = ['object','string']).columns)
                     logging.info(f"Required number of columns:{number_of_columns}")
                     logging.info(f"Data frame has columns:{df_numerical_columns}")
                     if df_numerical_columns==number_of_columns:
@@ -113,7 +113,7 @@ class DataValidation:
             data_validation_artifact = DataValidationArtifact(
                             validation_status=status,
                             valid_train_file_path=self.data_validation_config.valid_train_file_path,
-                            valid_test_file_path=self.data_validation_config.valid_train_file_path,
+                            valid_test_file_path=self.data_validation_config.valid_test_file_path,
                             invalid_train_file_path=None,
                             invalid_test_file_path=None,
                             drift_report_file_path=self.data_validation_config.drift_report_file_path,
