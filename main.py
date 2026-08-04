@@ -10,6 +10,7 @@ from networksecurity.entity.config_entity import (
             ModelTrainerConfig)
 from networksecurity.entity.artifact_entity import DataIngestionArtifact, DataValidationArtifact, ModelTrainerArtifact
 import sys
+import os
 if __name__ == '__main__':
     try:
         data_pipeline_config = TrainingPipelineConfig()
