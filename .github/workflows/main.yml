@@ -71,33 +71,35 @@ jobs:
             aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
             aws-region: ${{ secrets.AWS_REGION }}
 
-        - name: Login to Amazon ECR
-          id: login_ecr
-          uses: aws-actions/amazon-ecr-login@v1
+         # REMOVE OR COMMENT OUT THIS STEP:
+        # - name: Login to Amazon ECR
+        #   id: login_ecr
+        #   uses: aws-actions/amazon-ecr-login@v1
+
+        # ADD THIS STEP INSTEAD (Uses native AWS CLI to authenticate Docker safely):
+        - name: Login to Amazon ECR via CLI
+          run: |
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ECR_LOGIN_URI }}
 
         - name: Pull latest image
-          env:
-            # Dynamically fetch the registry URI from the login step output
-            ECR_REGISTRY: ${{ steps.login_ecr.outputs.registry }}
-            ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
           run: |
-            docker pull $ECR_REGISTRY/$ECR_REPOSITORY:latest
+            docker pull ${{ secrets.AWS_ECR_LOGIN_URI }}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
 
         # - name: Stop and remove container if running
         #   run: |
         #     docker ps -q --filter "name=networksecurity" | grep -q . && docker stop networksecurity && docker rm -fv networksecurity
 
         - name: Run Docker Image to serve users
-          env:
-            ECR_REGISTRY: ${{ steps.login_ecr.outputs.registry }}
-            ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
           run: |
             docker run -d -p 8080:8080 --ipc="host" --name=networksecurity \
               -e 'AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}' \
               -e 'AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}' \
               -e 'AWS_REGION=${{ secrets.AWS_REGION }}' \
-              $ECR_REGISTRY/$ECR_REPOSITORY:latest
+              ${{ secrets.AWS_ECR_LOGIN_URI }}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
 
         - name: Clean previous images and containers
           run: |
             docker system prune -f
+
+        - name: Clear build cache
+          run: docker builder prune -f
