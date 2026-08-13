@@ -29,6 +29,11 @@ import dagshub
 load_dotenv()
 DAGSHUB_USERNAME = os.getenv('DAGSHUB_USERNAME')
 DAGSHUB_REPO_NAME= os.getenv('DAGSHUB_REPO_NAME')
+DAGSHUB_ACCESS_TOKEN = os.getenv("DAGSHUB_ACCESS_TOKEN")
+# Set the token environment variable so DagsHub can authenticate passwordlessly
+if DAGSHUB_ACCESS_TOKEN:
+    os.environ["DAGSHUB_ACCESS_TOKEN"] = DAGSHUB_ACCESS_TOKEN
+
 dagshub.init(repo_owner=DAGSHUB_USERNAME, repo_name=DAGSHUB_REPO_NAME, mlflow=True)
 
 class ModelTrainer:
