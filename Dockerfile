@@ -3,8 +3,8 @@ FROM python:3.10-slim-bookworm
 WORKDIR /app
 
 RUN apt-get update -y && \
-    apt-get install -y awscli git  && \
-    apt-get clean
+    apt-get install -y --no-install-recommends awscli && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/requirements.txt
 
