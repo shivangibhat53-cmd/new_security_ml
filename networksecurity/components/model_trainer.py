@@ -1,7 +1,7 @@
 import os
 import sys
 from dotenv import load_dotenv
-
+import dagshub.auth
 from networksecurity.exception.exception import NetworkSecurityException
 from networksecurity.logging.logger import logging
 
@@ -32,7 +32,7 @@ DAGSHUB_REPO_NAME= os.getenv('DAGSHUB_REPO_NAME')
 DAGSHUB_ACCESS_TOKEN = os.getenv("DAGSHUB_ACCESS_TOKEN")
 # Set the token environment variable so DagsHub can authenticate passwordlessly
 if DAGSHUB_ACCESS_TOKEN:
-    os.environ["DAGSHUB_ACCESS_TOKEN"] = DAGSHUB_ACCESS_TOKEN
+    dagshub.auth.add_app_token(DAGSHUB_ACCESS_TOKEN)
 
 dagshub.init(repo_owner=DAGSHUB_USERNAME, repo_name=DAGSHUB_REPO_NAME, mlflow=True)
 

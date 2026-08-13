@@ -96,6 +96,7 @@ jobs:
             -e 'DAGSHUB_USERNAME=${{ secrets.DAGSHUB_USERNAME }}' \
             -e 'DAGSHUB_REPO_NAME=${{ secrets.DAGSHUB_REPO_NAME }}' \
             -e 'DAGSHUB_ACCESS_TOKEN=${{ secrets.DAGSHUB_ACCESS_TOKEN }}' \
+            -e 'MONGODB_URI=${{ secrets.MONGODB_URI }}' \
             ${{ secrets.AWS_ECR_LOGIN_URI_DEP }}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
 
       - name: Clean previous images and containers
