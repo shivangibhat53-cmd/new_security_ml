@@ -31,6 +31,12 @@ DAGSHUB_USERNAME = os.getenv('DAGSHUB_USERNAME')
 DAGSHUB_REPO_NAME= os.getenv('DAGSHUB_REPO_NAME')
 DAGSHUB_ACCESS_TOKEN = os.getenv("DAGSHUB_ACCESS_TOKEN")
 # Set the token environment variable so DagsHub can authenticate passwordlessly
+print(f"--- DAGSHUB DEBUG INITIALIZATION ---")
+print(f"DAGSHUB_USERNAME value is: {DAGSHUB_USERNAME}")
+print(f"DAGSHUB_REPO_NAME value is: {DAGSHUB_REPO_NAME}")
+print(f"DAGSHUB_ACCESS_TOKEN exists: {DAGSHUB_ACCESS_TOKEN is not None}")
+print(f"------------------------------------")
+
 if DAGSHUB_ACCESS_TOKEN:
     dagshub.auth.add_app_token(DAGSHUB_ACCESS_TOKEN)
 
