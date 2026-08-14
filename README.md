@@ -33,7 +33,15 @@ An end-to-end machine learning pipeline that detects phishing/malicious network 
 - [Author](#author)
 
 ---
+## Live Demo
 
+The app is deployed on AWS EC2 and reachable here:
+
+🔗 http://ec2-3-21-55-251.us-east-2.compute.amazonaws.com:8080/docs
+
+⚠️ Note: This is hosted on a free-tier AWS account. If the link doesn't load, the free tier has likely expired/the instance has been stopped — it isn't guaranteed to run indefinitely. Feel free to clone the repo and run it locally or on your own AWS account in that case (see Setup & Installation and Cloud Deployment (AWS)).
+
+---
 ## Overview
 
 This project trains a classifier that flags network traffic records as phishing/malicious vs. legitimate, based on a set of engineered features (URL/domain characteristics typical of phishing datasets). It is built as a reusable Python package (`networksecurity`) with a clearly separated pipeline architecture, rather than a single monolithic script, so that each stage (ingestion, validation, transformation, training) can be run, tested, or swapped independently.
@@ -606,20 +614,20 @@ A condensed, ordered checklist of everything involved in standing this project u
 14. Build `app.py` (FastAPI) with `/`, `/train`, and `/predict_route` routes.
 15. Add S3 sync logic (`cloud/s3_syncer.py`) so every training run backs up `artifacts/` and `final_model/` to an S3 bucket.
 16. Install & configure AWS CLI locally (`aws configure`) using an IAM user with sufficient permissions; create the S3 bucket and matching bucket name in code.
-![S3 Bucket](images\S3_bucket_folders.png)
-![S3 Bucket Artifacts folder](images\S3_bucket_artifact_folder.png)
-![S3 Bucket Final Model folder](images\s3_bucket_final_model_folder.png)
+![S3 Bucket](images/S3_bucket_folders.png)
+![S3 Bucket Artifacts folder](images/S3_bucket_artifact_folder.png)
+![S3 Bucket Final Model folder](images/s3_bucket_final_model_folder.png)
 17. Write the `Dockerfile` (`CMD ["python3","app.py"]`, remembering this must include `git` for DagsHub compatibility).
 18. Create a private ECR repository for the image.
-![ECR Repository](images\images\image_to_ECR_using_actions.png)
+![ECR Repository](images/image_to_ECR_using_actions.png)
 19. Write `.github/workflows/main.yaml` with CI → CD (build/push to ECR) → CD (deploy) jobs, and add AWS secrets to the GitHub repo.
 20. Launch an Ubuntu EC2 instance, install Docker on it, install the AWS CLI, and register it as a **self-hosted GitHub Actions runner**.
-![Self Hoster Runner](images\images\github_actions_runner.png)
-![Self Hoster Runner listener](images\ec2_runner_job_succeeded.png)
+![Self Hoster Runner](images/github_actions_runner.png)
+![Self Hoster Runner listener](images/ec2_runner_job_succeeded.png)
 21. Open the deployment port (e.g. `8080`) in the EC2 security group.
-![App running on EC2](images\app_running_on_aws.pngimages\ec2_runner_job_succeeded.png)
-![Prediction](images\aws_predict_data.png)
-![Docker Logs using EC2 Instance Connect](images\docker_logs_aws.png)
+![App running on EC2](images/app_running_on_aws.png)
+![Prediction](images/aws_predict_data.png)
+![Docker Logs using EC2 Instance Connect](images/docker_logs_aws.png)
 22. Push to `main` and confirm the full pipeline runs end-to-end, landing at `http://<ec2-public-dns>:8080/docs`.
 
 ---
