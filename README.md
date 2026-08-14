@@ -6,6 +6,7 @@ An end-to-end machine learning pipeline that detects phishing/malicious network 
 
 ## Table of Contents
 
+- [Live Demo](#live-demo)
 - [Overview](#overview)
 - [Architecture](#architecture)
 - [Project Structure](#project-structure)
