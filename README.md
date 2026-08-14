@@ -17,6 +17,7 @@ An end-to-end machine learning pipeline that detects phishing/malicious network 
   - [Running the Training Pipeline](#running-the-training-pipeline)
   - [Running the API Server](#running-the-api-server)
 - [API Reference](#api-reference)
+- [Code Reference](#code-reference)
 - [Docker](#docker)
 - [Experiment Tracking](#experiment-tracking)
 - [Cloud Deployment (AWS)](#cloud-deployment-aws)
@@ -86,7 +87,7 @@ Push to GitHub (main branch)
         │
         ▼
  GitHub Actions: Continuous Integration
-   (lint / basic checks)
+   (basic checks)
         │
         ▼
  GitHub Actions: Continuous Delivery
@@ -164,7 +165,7 @@ data_schema/
 └── schema.yaml                   # Column names, dtypes, and numerical_columns used in Data Validation
 ```
 
-> **Note:** The `networksecurity/` package contains the actual pipeline logic and is imported throughout `app.py` and `main.py`. Its internal implementation isn't reproduced line-by-line here — see inline docstrings/comments in each module.
+> **Note:** The `networksecurity/` package contains the actual pipeline logic and is imported throughout `app.py`. Its internal implementation isn't reproduced line-by-line here — see inline docstrings/comments in each module.
 
 ---
 
@@ -178,7 +179,7 @@ data_schema/
 | ML                      | scikit-learn (GridSearchCV for hyperparameter tuning) |
 | Experiment tracking     | MLflow, DagsHub |
 | API framework            | FastAPI, Uvicorn |
-| Serialization            | dill |
+| Serialization            | pickle |
 | Config format             | pyaml (`schema.yaml`) |
 | Containerization          | Docker |
 | Cloud storage             | AWS S3 (artifact + model backups) |
@@ -190,21 +191,17 @@ data_schema/
 
 ## Setup & Installation
 
-### 1. Create a conda environment
-Data science projects are generally better served by conda than plain `venv`, since it handles binary/native dependencies (numpy, scikit-learn, etc.) more reliably.
+### 1. Clone the repository
+```bash
+git clone <repo-url>
+cd <repo-folder>
+```
+
+### 2. Create a conda environment
+
 ```bash
 conda create -p venv python==3.11 -y
 conda activate venv/
-```
-
-### 2. Clone / initialize the repository
-```bash
-git init
-git add README.md
-git commit -m "Initial commit - README.md file created"
-git branch -M main
-git remote add origin <url-to-your-repo>
-git push -u origin main
 ```
 
 ### 3. Install dependencies
@@ -249,7 +246,9 @@ And add the following as **GitHub Actions repository secrets** (Settings → Sec
 | `AWS_ACCESS_KEY_ID` | IAM user access key (Administrator access, for CI/CD) |
 | `AWS_SECRET_ACCESS_KEY` | IAM user secret key |
 | `AWS_REGION` | e.g. `us-east-2` |
-| `ECR_REPOSITORY_URI` / `AWS_ECR_LOGIN_URI` | Your ECR repository URI |
+| `AWS_ECR_LOGIN_URI` | Your ECR repository URI |
+| `AWS_ECR_LOGIN_URI_DEP` | Your ECR repository URI without /reponame
+| `ECR_REPOSITORY_URI`    | ECR repo name
 | `MONGODB_URI` | Same MongoDB Atlas URI used locally |
 | `DAGSHUB_USERNAME` | Same DagsHub username used locally |
 | `DAGSHUB_REPO_NAME` | Same DagsHub repo name used locally |
@@ -294,11 +293,8 @@ This will:
 3. **Data Transformation** — load `schema.yaml`, apply a `KNNImputer`-based preprocessing pipeline (no resampling like SMOTE is needed since the dataset is balanced), and save `preprocessor.pkl`.
 4. **Model Trainer** — run `GridSearchCV` across candidate models, evaluate on precision/recall/F1, log the run to MLflow (backed by DagsHub), and save the best model as `model.pkl` under `final_model/`.
 
-To inspect experiment runs locally:
-```bash
-set MLFLOW_ALLOW_FILE_STORE=true          # Windows; use `export` on macOS/Linux
-mlflow ui --backend-store-uri ./mlruns
-```
+To inspect experiment:
+Before running the training pipeline for the first time, make sure your local machine is authenticated with DagsHub so MLflow can capture experiment runs correctly. Run `dagshub.init(repo_owner="<DAGSHUB_USERNAME>", repo_name="<DAGSHUB_REPO_NAME>", mlflow=True)` once (or let `model_trainer.py` do it on import) — this will prompt you to log in to DagsHub in your browser and link the session to your repo. It's also worth making sure your project folder is a proper Git repository connected to your GitHub remote, since `dagshub.init()` falls back to inspecting the local `.git` folder to resolve the repo when the `DAGSHUB_USERNAME`/`DAGSHUB_REPO_NAME` environment variables aren't set. Once this is done, every training run will automatically log its metrics, parameters, and model artifacts to your DagsHub repo's MLflow tracking server, viewable either in the local MLflow UI or directly on DagsHub
 
 ### Running the API Server
 
@@ -377,14 +373,14 @@ Authentication to DagsHub uses the `DAGSHUB_USERNAME`, `DAGSHUB_REPO_NAME`, and 
 ## Cloud Deployment (AWS)
 
 ### S3 — Artifact & Model Sync
-After each training run, the `artifacts/` folder and `final_model/` folder are synced to an S3 bucket (named to match the code, e.g. `networksecurity`) using a small sync helper (`networksecurity/cloud/s3_syncer.py`), invoked from `training_pipeline.py`. This gives you durable, versioned backups of every run's data and model outside of the EC2/container filesystem, which is ephemeral.
+After each training run, the `artifacts/` folder and `final_model/` folder are synced to an S3 bucket using a small sync helper (`networksecurity/cloud/s3_syncer.py`), invoked from `training_pipeline.py`. This gives you durable, versioned backups of every run's data and model outside of the EC2/container filesystem, which is ephemeral.
 
 Prerequisites:
 - AWS CLI installed and configured (`aws configure`) with an IAM user that has sufficient S3 permissions.
 - An S3 bucket created with a name matching what's referenced in the code.
 
 ### ECR — Container Registry
-The trained app is packaged into a Docker image and pushed to a **private** AWS ECR repository (not Docker Hub, which requires a paid plan for private image hosting).
+The trained app is packaged into a Docker image and pushed to a **private** AWS ECR repository.
 
 1. In the AWS Console, go to **ECR → Create repository**, name it (e.g. `networksecurity`).
 2. Copy the repository URI — this is used in the CI/CD workflow to tag and push images.
@@ -394,13 +390,19 @@ An Ubuntu EC2 instance runs the container and serves the API.
 
 **One-time Docker setup on the instance:**
 ```bash
-sudo apt-get update -y
-sudo apt-get upgrade -y      # optional
+# Update packages
+sudo apt-get update -y && sudo apt-get upgrade -y
 
+# Download and install Docker cleanly
 curl -fsSL https://get.docker.com -o get-docker.sh
 sudo sh get-docker.sh
-sudo usermod -aG docker ubuntu
-newgrp docker
+rm get-docker.sh
+
+# Add your user to the Docker group 
+sudo usermod -aG docker $USER
+
+# Apply group permissions
+sg docker -c "docker ps"
 ```
 
 **AWS CLI on the instance** (needed so the self-hosted GitHub Actions runner can authenticate to ECR):
@@ -412,7 +414,7 @@ sudo apt-get install -y awscli
 
 Once running, the app is reachable at:
 ```
-http://<ec2-public-dns>:8080/docs
+http://<ec2...compute.amazonaws.com>:8080/docs
 ```
 
 ---
@@ -423,7 +425,7 @@ http://<ec2-public-dns>:8080/docs
 
 | Job | Runs on | Responsibility |
 |---|---|---|
-| **Continuous Integration** | GitHub-hosted runner | Basic checks/linting on the codebase |
+| **Continuous Integration** | GitHub-hosted runner | Basic checks on the codebase |
 | **Continuous Delivery** | GitHub-hosted runner | `docker build` the image and `docker push` it to AWS ECR |
 | **Continuous Deployment** | **Self-hosted runner** (installed on the EC2 instance) | Pulls the latest image from ECR and runs it as a container on EC2 |
 
@@ -444,7 +446,146 @@ Once everything is wired up, a normal `git push` to `main` triggers: build → p
 
 ---
 
-## Full Setup Walkthrough
+## Code Reference
+
+This section documents the actual contents of each uploaded root-level file, verified directly against the source — not inferred.
+
+### `app.py`
+FastAPI application entry point.
+- Creates a `pymongo.MongoClient(mongo_db_url, tlsCAFile=ca)` at **module import time** (`ca = certifi.where()`), so a bad/missing URI fails fast on startup.
+- Imports `DATA_INGESTION_COLLECTION_NAME` and `DATA_INGESTION_DATABASE_NAME` from `networksecurity.constant.training_pipeline` to select the Mongo `database`/`collection` objects (unused elsewhere in this file, but establishes the connection is scoped to the ingestion collection).
+- Registers `CORSMiddleware` with `allow_origins=["*"]`, `allow_credentials=True`, `allow_methods=["*"]`, `allow_headers=["*"]`.
+- Uses `Jinja2Templates(directory="./templates")` — so a `templates/table.html` file is expected to exist relative to wherever `app.py` runs.
+- **Routes:**
+  - `GET /` (`tags=["authentication"]`) → `RedirectResponse(url='/docs')`
+  - `GET /train` → instantiates `TrainingPipeline()` and calls `.run_pipeline()`; returns `Response("Training is successful")` on success, otherwise raises `NetworkSecurityException(e, sys)`
+  - `POST /predict_route(request: Request, file: UploadFile = File(...))` →
+    1. `pd.read_csv(file.file)`
+    2. `load_object(file_path="final_model/preprocessor.pkl")` and `load_object(file_path="final_model/model.pkl")` — both **relative paths**, so the app must be run from the directory containing `final_model/`
+    3. Wraps both in `NetworkModel(preprocessor=..., model=...)` and calls `.predict(df)`
+    4. Appends result as `df['predicted_column']`
+    5. Writes `df.to_csv('prediction_output/output.csv')` (also relative — `prediction_output/` must exist beforehand, the code doesn't create it)
+    6. Converts `df` to an HTML table via `df.to_html(classes='table table-striped')` and renders it into `table.html` via `TemplateResponse`
+- `if __name__ == "__main__":` → `app_run(app, host="0.0.0.0", port=8000)` (uvicorn's `run`, aliased on import)
+
+### `main.py`
+CLI entry point for the training pipeline (no FastAPI involved).
+- Imports each pipeline component directly: `DataIngestion`, `DataValidation`, `DataTransformation`, `ModelTrainer`, plus their matching config classes (`DataIngestionConfig`, `DataValidationConfig`, `DataTransformationConfig`, `ModelTrainerConfig`, `TrainingPipelineConfig`) and artifact classes (`DataIngestionArtifact`, `DataValidationArtifact`, `ModelTrainerArtifact`).
+- Sequential flow, each stage's config takes the shared `TrainingPipelineConfig` instance:
+  ```python
+  data_pipeline_config = TrainingPipelineConfig()
+  data_ingestion = DataIngestion(DataIngestionConfig(data_pipeline_config))
+  data_ingestion_artifact = data_ingestion.intiate_data_ingestion()      # note: "intiate" (typo, consistent across the codebase)
+
+  data_validation = DataValidation(data_ingestion_artifact, DataValidationConfig(data_pipeline_config))
+  data_validation_artifact = data_validation.intiate_data_validation()
+
+  data_transformation = DataTransformation(data_validation_artifact, DataTransformationConfig(data_pipeline_config))
+  data_transformation_artifact = data_transformation.intiate_data_transformation()
+
+  model_trainer = ModelTrainer(model_trainer_config=ModelTrainerConfig(data_pipeline_config),
+                                data_transformation_artifact=data_transformation_artifact)
+  model_trainer_artifact = model_trainer.intiate_model_trainer()
+  print(model_trainer_artifact)
+  ```
+- Every stage is wrapped so any exception is re-raised as `NetworkSecurityException(e, sys)`.
+- Uses `logging.info(...)` between stages (Intiate/completed messages) for basic pipeline observability.
+
+
+### `push_data.py`
+Standalone ETL script — MongoDB loader, not imported by the rest of the app.
+- Loads `.env`, reads `MONGODB_URI` into `MONGO_DB_URL`.
+- `certifi.where()` → `ca`, used for `tlsCAFile` on the Mongo connection (same TLS pattern as `app.py`).
+- **Class `NetworkDataExtract`:**
+  - `__init__(self, database_name: str, collection_name: str)` — opens `pymongo.MongoClient(MONGO_DB_URL, tlsCAFile=ca)`, stores `self.database`/`self.collection`
+  - `cv_to_json_convertor(self, file_path)` — reads a CSV with `pandas`, resets the index, then does `data.T.to_json()` → `json.loads(...)` → `.values()` → `list(...)` to turn each row into a JSON-serializable dict. 
+  - `insert_data_mongodb(self, records, database_name=None, collection_name=None)` — resolves target DB/collection (falls back to `self.database`/`self.collection` if not passed), does `collection.insert_many(records)`, returns `len(records)`.
+- `if __name__ == '__main__':` block hardcodes:
+  ```python
+  FILE_PATH = r'network_data\phisingData.csv'   # Windows-style path — breaks on Linux/Docker
+  DATABASE = 'shiv'
+  COLLECTION = 'networkdata'
+  ```
+  then runs the extract → insert flow and `print(records)` (prints the full in-memory record list — noisy for large datasets, worth removing/guarding in practice).
+
+### `test_mongodb.py`
+Minimal, disconnected connectivity check — not imported anywhere else.
+```python
+from pymongo import MongoClient
+from pymongo.server_api import ServerApi
+uri = "mongodb+srv://<user_name>:<password>@cluster0.ge8cxa3.mongodb.net/?appName=Cluster0"
+client = MongoClient(uri, server_api=ServerApi('1'))
+try:
+    client.admin.command('ping')
+    print("Pinged your deployment. You successfully connected to MongoDB!")
+except Exception as e:
+    print(e)
+```
+Placeholder credentials are left in as-is (`<user_name>:<password>`) — this file is meant to be edited locally with real values temporarily, never committed with real creds, and doesn't read from `.env` at all (unlike every other script in the project).
+
+### `setup.py`
+Standard `setuptools` packaging config.
+- `get_requirements() -> List[str]` reads `requirements.txt` line by line, strips whitespace, and skips blank lines and the literal string `-e .` (so the editable-install marker doesn't get treated as a package requirement itself, avoiding a circular self-reference).
+- Handles `FileNotFoundError` gracefully (prints a message, returns an empty list) rather than crashing the build.
+- `setup(name="Network Security ML", version='0.0.1', author='Shivangi Bhat', author_email='shivangibhat53@gmail.com', packages=find_packages(), install_requires=get_requirements())`
+- `find_packages()` auto-discovers any directory with an `__init__.py` (i.e. the `networksecurity` package and its subpackages) — no explicit package list is maintained by hand.
+
+### `requirements.txt`
+```
+python-dotenv
+pandas
+numpy
+pymongo
+pymongo==4.7
+certifi
+scikit-learn
+dill
+pyaml
+mlflow
+dagshub
+fastapi
+uvicorn
+python-multipart
+#-e .
+```
+
+- `-e .` is **commented out** here (`#-e .`) — meaning, as uploaded, this file will **not** auto-install the local `networksecurity` package via `pip install -r requirements.txt`. Either uncomment it, or run `pip install -e .` separately, or the app's local imports (`from networksecurity...`) will fail until the package is installed some other way.
+- `python-multipart` is present specifically because `UploadFile`/`File(...)` in `app.py`'s `/predict_route` requires it for multipart form parsing.
+
+### `Dockerfile`
+```dockerfile
+FROM python:3.10-slim-bookworm
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    awscli \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip setuptools && \
+    pip install --no-cache-dir -r requirements.txt
+COPY . /app
+CMD ["python3","app.py"]
+```
+- `git` is installed specifically because `dagshub.init()` (invoked somewhere in the `networksecurity` package, per your process notes) depends on `GitPython`, which needs a real `git` binary on `$PATH` at runtime, not just build time.
+- `awscli` is installed for S3 sync / ECR interactions from within the container or the CI/CD deploy step.
+- Requirements are installed **before** `COPY . /app`, which is a deliberate Docker layer-caching optimization — dependency installs are only re-run when `requirements.txt` changes, not on every code change.
+- Because `#-e .` is commented out in `requirements.txt` (see above), the `networksecurity` package itself is **not** pip-installed inside this image via the `RUN pip install -r requirements.txt` step — it only exists as plain files copied in via `COPY . /app`. This still works for `python3 app.py` since Python resolves `networksecurity` as a regular package relative to the working directory, but it means `pip show networksecurity` inside the container would report nothing installed.
+
+### `_env` (should be renamed `.env`)
+Holds four key-value pairs: `MONGODB_URI`, `DAGSHUB_USERNAME`, `DAGSHUB_REPO_NAME`, `DAGSHUB_ACCESS_TOKEN`. As uploaded, this filename does **not** start with a dot, so it will not be picked up by `python-dotenv`'s default `load_dotenv()` (which looks for `.env`) and will not be excluded by the `.gitignore` rule `**.env**` unless renamed.
+
+### `_gitignore` (should be renamed `.gitignore`)
+```
+venv/
+.env
+**/__pycache__/
+*.py[cod]
+.vscode/
+```
+Same issue — as uploaded without the leading dot, this file has no effect as an actual `.gitignore`. Once renamed, note it already correctly targets `.env`, but would need entries added for `artifacts/`, `final_model/`, `mlruns/`, `prediction_output/`, and `*.egg-info/` to keep generated pipeline output and packaging metadata out of version control.
+
+---
+
 
 A condensed, ordered checklist of everything involved in standing this project up from scratch (useful as a rebuild/runbook reference):
 
@@ -464,11 +605,20 @@ A condensed, ordered checklist of everything involved in standing this project u
 14. Build `app.py` (FastAPI) with `/`, `/train`, and `/predict_route` routes.
 15. Add S3 sync logic (`cloud/s3_syncer.py`) so every training run backs up `artifacts/` and `final_model/` to an S3 bucket.
 16. Install & configure AWS CLI locally (`aws configure`) using an IAM user with sufficient permissions; create the S3 bucket and matching bucket name in code.
+![S3 Bucket](images\S3_bucket_folders.png)
+![S3 Bucket Artifacts folder](images\S3_bucket_artifact_folder.png)
+![S3 Bucket Final Model folder](images\s3_bucket_final_model_folder.png)
 17. Write the `Dockerfile` (`CMD ["python3","app.py"]`, remembering this must include `git` for DagsHub compatibility).
 18. Create a private ECR repository for the image.
+![ECR Repository](images\images\image_to_ECR_using_actions.png)
 19. Write `.github/workflows/main.yaml` with CI → CD (build/push to ECR) → CD (deploy) jobs, and add AWS secrets to the GitHub repo.
 20. Launch an Ubuntu EC2 instance, install Docker on it, install the AWS CLI, and register it as a **self-hosted GitHub Actions runner**.
+![Self Hoster Runner](images\images\github_actions_runner.png)
+![Self Hoster Runner listener](images\ec2_runner_job_succeeded.png)
 21. Open the deployment port (e.g. `8080`) in the EC2 security group.
+![App running on EC2](images\app_running_on_aws.pngimages\ec2_runner_job_succeeded.png)
+![Prediction](images\aws_predict_data.png)
+![Docker Logs using EC2 Instance Connect](images\docker_logs_aws.png)
 22. Push to `main` and confirm the full pipeline runs end-to-end, landing at `http://<ec2-public-dns>:8080/docs`.
 
 ---
@@ -476,9 +626,6 @@ A condensed, ordered checklist of everything involved in standing this project u
 ## Troubleshooting Log
 
 Real issues hit while building this out, and how they were resolved — useful if you hit the same ones:
-
-- **VS Code shows `pymongo` as "not installed" even though it's in the active venv.**
-  Fix: `Ctrl+Shift+P → Python: Select Interpreter` (pick the venv), then `Ctrl+Shift+P → Developer: Reload Window`.
 
 - **`ImportError: Bad git executable` (from `dagshub.init()`) inside the Docker container.**
   Cause: the base image didn't have `git` installed, and `dagshub`/`GitPython` requires it. Fix: install `git` in the `Dockerfile`.
@@ -516,9 +663,10 @@ Real issues hit while building this out, and how they were resolved — useful i
 
 ## Known Issues / TODO
 
-- [ ] Fix `MONGOMONGODB_URI` typo in `app.py` (should read `MONGODB_URI` to match `.env` and `push_data.py`)
-- [ ] Deduplicate `pymongo` entry in `requirements.txt` (listed both unpinned and as `pymongo==4.7`)
-- [ ] Replace Windows-style path in `push_data.py` (`network_data\phisingData.csv`) with an OS-agnostic path (e.g. `os.path.join` or `pathlib`) for Linux/Docker compatibility
+- [ ] Uncomment `-e .` in `requirements.txt` (currently `#-e .`), or document that `pip install -e .` must be run separately — otherwise the `networksecurity` package is never actually `pip`-installed, only present as loose files
+- [ ] Add `artifacts/`, `final_model/`, `mlruns/`, `prediction_output/`, and `*.egg-info/` to `.gitignore` once renamed
+- [ ] Have `app.py` create `prediction_output/` at startup if missing, rather than assuming it exists
+- [ ] Guard or remove the `print(records)` at the end of `push_data.py` — prints the entire dataset to stdout on every run
 - [ ] Restrict CORS origins for production deployment
 - [ ] Scope down MongoDB Atlas network access and the CI/CD IAM user's permissions (currently broad, see Security Notes)
 - [ ] Add automated tests for pipeline components
